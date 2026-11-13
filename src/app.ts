@@ -68,13 +68,12 @@ export class App {
   private state: State = 'title';
   private accumulator = 0;
   private rideTime = 0;
-  private waterCooldown = 0;
-  private waterHintShown = false;
   private jumpTimes: number[] = [];
   private readonly forceReveal: boolean;
   private readonly autoPilot: boolean;
   private readonly modelMode: boolean;
   private readonly modelWings: boolean;
+  private readonly overviewMode: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
     const params = new URLSearchParams(location.search);
@@ -82,6 +81,7 @@ export class App {
     this.autoPilot = params.has('auto');
     this.modelMode = params.has('model');
     this.modelWings = params.has('wings');
+    this.overviewMode = params.has('overview');
     this.touch = TouchControls.isTouchCapable() || params.has('touch');
     document.body.classList.toggle('touch', this.touch);
 
@@ -89,13 +89,14 @@ export class App {
     this.shanshui = new ShanshuiMaterial(this.touch);
     this.world = new World(seedFromUrl(1113));
 
-    const terrain = buildTerrain(this.world);
+    const terrain = buildTerrain(this.world, 6);
     terrain.material = this.shanshui;
     this.render.scene.add(terrain);
 
     if (params.get('outline') !== '0') {
+      const coarse = buildTerrain(this.world, 12);
       const outline = new THREE.Mesh(
-        makeOutlineGeometry(terrain.geometry, 1.1),
+        makeOutlineGeometry(coarse.geometry, 1.6),
         new THREE.MeshBasicMaterial({
           color: 0x233230,
           side: THREE.BackSide,
@@ -113,7 +114,7 @@ export class App {
       this.render.scene.add(this.backdrop.group);
     }
 
-    this.props = buildProps(this.world);
+    this.props = buildProps(this.world, this.touch ? 0.6 : 1);
     this.render.scene.add(this.props.root);
 
     this.motes = new Motes(this.world, this.world.seed);
@@ -173,7 +174,7 @@ export class App {
       };
     }
 
-    if (this.modelMode) {
+    if (this.modelMode || this.overviewMode) {
       this.startRun();
       this.hud.hide();
       el('title').classList.add('hidden');
@@ -220,8 +221,6 @@ export class App {
     this.rig.snap(this.bike);
     this.rideTime = 0;
     this.accumulator = 0;
-    this.waterCooldown = 0;
-    this.waterHintShown = false;
     this.jumpTimes = [];
     this.state = 'playing';
     this.syncBasket();
@@ -249,7 +248,6 @@ export class App {
     this.motes.reset();
     this.syncBasket();
     this.jumpTimes = [];
-    this.waterCooldown = 0;
     this.targetBeam.visible = false;
     this.view.reset();
     this.touchControls?.releaseAll();
@@ -365,6 +363,10 @@ export class App {
   }
 
   private update(dt: number): void {
+    if (this.overviewMode) {
+      this.updateOverview(dt);
+      return;
+    }
     if (this.modelMode) {
       this.updateModelMode(dt);
       return;
@@ -402,7 +404,6 @@ export class App {
 
     if (this.state === 'playing') {
       this.rideTime += dt;
-      this.waterCooldown = Math.max(0, this.waterCooldown - dt);
       this.accumulator += dt;
 
       if (input.jump) {
@@ -429,17 +430,9 @@ export class App {
       let first = true;
       while (this.accumulator >= FIXED_STEP) {
         const stepInput = first ? input : { ...input, jump: false };
-        const ev = this.bike.update(FIXED_STEP, stepInput);
+        this.bike.update(FIXED_STEP, stepInput);
         first = false;
         this.accumulator -= FIXED_STEP;
-        if (ev.water && this.waterCooldown <= 0) {
-          this.waterCooldown = 5;
-          this.sfx.splash();
-          if (!this.waterHintShown) {
-            this.waterHintShown = true;
-            this.hud.toast('浅水会拖慢脚步,沿石桥过河更快', 3.6);
-          }
-        }
       }
 
       this.scoring.update(dt);
@@ -501,6 +494,27 @@ export class App {
     this.sky.update(this.render.camera, this.rideTime);
     this.animateBeacons(this.rideTime);
     this.updateTargetBeam();
+  }
+
+  private updateOverview(dt: number): void {
+    this.rideTime += dt;
+    const camera = this.render.camera;
+    const angle = this.rideTime * 0.06;
+    camera.position.set(Math.sin(angle) * 220, 320, Math.cos(angle) * 220);
+    camera.lookAt(0, 6, 0);
+    camera.fov = 55;
+    camera.updateProjectionMatrix();
+    this.shanshui.uniforms.uFogNear.value = 280;
+    this.shanshui.uniforms.uFogFar.value = 1400;
+    if (this.render.scene.fog instanceof THREE.Fog) {
+      this.render.scene.fog.near = 300;
+      this.render.scene.fog.far = 1400;
+    }
+    this.shanshui.sync(this.world, this.rideTime);
+    this.backdrop.update(camera);
+    this.sky.update(camera, this.rideTime);
+    this.targetBeam.visible = false;
+    this.animateBeacons(this.rideTime);
   }
 
   private updateModelMode(dt: number): void {
@@ -568,6 +582,8 @@ export class App {
   private frame = (): void => {
     requestAnimationFrame(this.frame);
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    this.props.windTime.value = performance.now() * 0.001;
+    this.props.updateNearGrass(this.bike.pos.x, this.bike.pos.z);
     this.update(dt);
     this.render.render();
     this.debug.update(dt);

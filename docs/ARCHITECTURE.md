@@ -2,21 +2,20 @@
 
 ## 坐标系与单位
 
-- 右手系 Three.js;**世界沿 +Z 展开**(骑行前进方向 ≈ +Z);单位:米
-- 地形参数化为 `(z, lateral)`:顶点 `x = centerX(z) + lateral`
+- 右手系 Three.js;世界是 x/z 对齐的正方形草甸,中心 (0,0),范围 **±560 m**;单位:米
+- 地形参数化为 `(x, z)` 网格;主网格 6 m 步长,描边用 12 m 粗网格
 - **屏幕右 = 世界 -x**:物理里 `yaw -= steer * rate`(D 键屏幕右转),HUD 箭头的角度符号也据此处理
-- 可玩走廊 `|lateral| ≤ 55`;崖壁在 55–120 m 抬升;横向软边界 ±118 m
-- `z ∈ [0, 800]`,卷轴端头在 0 / 800 处
+- 可玩边界 ±542 m;半径 470 m 外抬升为环形远山(边界 560 m 处 +180 m),超出后靠雾与陡坡收边
 
-## 世界常量(`src/world/World.ts`、`Path.ts`)
+## 世界常量(`src/world/World.ts`)
 
-- 中心线 `centerX(z)`:每 100 m 一个 Catmull-Rom 控制点,横向 ±25 m
-- 河流:`riverZ(x) = 340 + 12·sin(0.03x)`,宽约 18 m;水面 y=-0.55,**河床压到 -0.9 的浅滩**,涉水只减速不重置
-- 桥:z≈340,`|x-centerX(340)|<5.2`;桥面 y=2.4,`|dz|≤8` 为平台,8–26 m 为连续引桥坡道(`bridgeYAt`);栏板限制骑手在桥面内
-- 五座亭台:z = 110 / 260 / 410 / 555 / 700,交替两岸(±40 m),地基半径 10 m 压平;基座碰撞半径 5.35 m
+- **26 座可骑山丘**:半径 55–150 m,高度 8–42 m;低丘与高丘错落,山肩坡度控制在约 0.47 以内,可从任意方向骑到山顶
+- 前 5 座山丘的顶上是五座亭台(交付点),山顶地基半径 8–16 m 压平;基座碰撞半径 5.35 m
+- 其余山丘顶部立一面小旗,标记可骑达的山顶
 - 每区需 **3 次交付** 完成;每区目标色循环 石青/石绿/赭石;区域半径 40→95 m
-- 一局限时 **480 s**;携带上限 **6**;光点重生 12 s
-- 碰撞:峡谷走廊 `|lateral| ≤ 60` 软墙 + 陡坡减速;桥面栏板;卷轴端头;树木/山石无碰撞
+- 一局限时 **480 s**;携带上限 **6**;光点重生 8 s
+- 碰撞:边界钳制 ±542 m;坡度 >0.5 强力减速、>1.1 基本挡停;亭台基座推出;树木/山石无碰撞
+- 河流与石桥已移除,当前地图只有草甸、山丘与环形远山
 
 ## 模块(实际实现)
 
@@ -30,10 +29,9 @@ src/
     Sfx.ts                WebAudio 程序化音效
     Debug.ts              ?debug=1 面板
   world/
-    Path.ts               centerX / riverZ
-    World.ts              heightAt / gradient / 区域与亭台 / 水与桥判定
-    TerrainBuilder.ts     (z,lateral) 网格 + aRegion/aValley;makeOutlineGeometry
-    Props.ts              松树/山石 InstancedMesh、亭台合并网格、桥、水面、卷轴端头
+    World.ts              方形山丘草甸 heightAt / gradient / 山丘与山顶亭台
+    TerrainBuilder.ts     (x,z) 方形网格 + aRegion/aValley;makeOutlineGeometry
+    Props.ts              多树种/草丛/野花/山石、山顶亭台、summit 小旗、风摆
   render/
     Renderer.ts           渲染器、场景、雾、灯光
     SkyDome.ts            天穹渐变 + 云带 + 日晕
@@ -69,9 +67,9 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 
 1. SkyDome(相机锁定,`depthTest:false`,renderOrder -30)
 2. 远山视差 3 层圆柱壳(`depthWrite:false`,renderOrder -10…-8)
-3. 地形 ribbon(`ShanshuiMaterial`)+ 反向外壳描边(可选 `?outline=0`)
-4. 水面、桥、亭台、树/石 InstancedMesh、卷轴端头
-5. 三色光点(一个 `THREE.Points` + 自定义 shader)
+3. 方形地形网格(`ShanshuiMaterial`)+ 粗网格反向外壳描边(可选 `?outline=0`)
+4. 多树种 InstancedMesh、跟随玩家的草丛毯、全场草丛/野花/成簇山石、山顶亭台与 summit 小旗
+5. 三色光点(八面体 InstancedMesh + 实例化 billboard 光晕贴图)
 6. DOM 层 `#paper`:SVG 噪声绢纹 + 径向暗角(**替代合成 pass**)
 7. 标准材质仍由 Hemisphere/Directional 光照;地形/远山用自定义 shader 自带光照
 
@@ -84,8 +82,7 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 - **起飞/收翼**:App 记录 Space 按下时间戳,1.2 s 内 ≥3 次 → 未飞行则 `bike.startFlying()`(vy=6.2,离地),飞行中则 `bike.stopFlying()`。
 - **飞行物理**:`Space` 按住 → `vy → +7`;`S`(throttle<0)→ `vy → -9` 俯冲;否则 `vy → -2.4` 缓降;指数平滑,`y ≤ 100`;触地自动收翼。飞行时转向保留最低 0.4 灵敏度,坡度不再影响速度。
 - **模型**:`BikeModel.setWings(active, phase)` 显示两片 DoubleSide 绢翼并做拍翅。
-- **碰撞**:`World.resolveCollisions(pos, radius)` 把车推出亭台基座,并在桥面平台内限制横向;非飞行时走廊横向钳制 ±60,坡度 >0.5 开始强力减速、>1.1 基本挡停。
-- **河流**:`heightAt` 河床 -0.9;`BikePhysics` 检测到浅水时持续减速并每 5 s 最多触发一次水声,不再重置位置。
+- **碰撞**:`World.resolveCollisions(pos, radius)` 把车推出亭台基座;边界钳制 ±542 m;坡度 >0.5 开始强力减速、>1.1 基本挡停(环形远山因此不可翻越)。
 
 ## 模型细节
 
@@ -101,6 +98,15 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 - **翅膀**(`buildWings`):每侧 5 片渐变色羽片合并成一个几何;`vertexColors` 从羽根米白过渡到羽尖墨青;`setWings(active, phase)` 做拍翅。
 - **颜料**(`Motes`):每颗由两个 InstancedMesh 组成——八面体宝石(MeshStandardMaterial + 每实例颜色)和实例化 billboard 光晕(手绘 CanvasTexture 径向光斑 + 十字星芒,每帧用相机四元数朝向)。总计 2 draw call。11 m 内磁吸(仅筐有空位时)、4.5 m 拾取、8 s 重生。
 - **为什么不用 Points/自定义实例 shader**:Windows ANGLE 会把 `gl_PointSize` 限制到 1 px;自定义 InstancedBufferGeometry + ShaderMaterial 在当前环境也出现空绘制。Texture + InstancedMesh 是最稳的跨平台方案。
+
+## 植被与地表
+
+- **树木**:松(5 层锥冠 + 树干)、阔叶(树干 + 5 个 Icosahedron 冠团)、竹(6 秆 + 叶片)、灌木;按高度/噪声选型,噪声密度成簇;统一用 `onBeforeCompile` 注入顶点风摆(以实例原点为相位),材质为 flatShading + vertexColors + 实例色。
+- **草丛**:3 面交叉 `PlaneGeometry` + 程序化 CanvasTexture(草叶 + 少量花点),alphaTest;桌面 4500 簇全场 + 6000 簇近身"草毯"(10 m 世界网格锚定,跟随玩家,跨格才重算矩阵);触屏按 0.6 细节缩放。
+- **野花**:实例化小八面体,白/金/青/赭四色。
+- **山石**:两种顶点抖动的低模岩体,顶部染苔;按 55 个簇中心、每簇 4–14 块分布。
+- **地表 shader**:平地混入草绿、草叶条纹、野花点、卵石点与泥土斑;坡面带岩石纹理;平地等高线强度降低,避免大片条纹。
+- **性能**:植被占用约 200k 三角面;触屏把树/草/花/石数量乘 0.6。`?overview=1` 可俯瞰。
 
 ## 自由视角
 
@@ -128,18 +134,18 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 
 ## 调试参数
 
-`?debug=1`、`?autostart=1`、`?reveal=1`、`?auto=1`、`?seed=42`、`?outline=0`、`?backdrop=0`、`?touch=1`、`?model=1`、`?wings=1`。`auto` 会先找最近光点,凑够 3 个再去最近未完成亭台,用于回归验证主循环。`?debug=1` 时 `window.__qianli = { bike, world, scoring, motes, input }` 供 CDP 脚本做传送/飞行/碰撞/触屏测试(`temp/cdp-flight.mjs`、`temp/cdp-mobile.mjs`、`temp/cdp-model.mjs`)。
+`?debug=1`、`?autostart=1`、`?reveal=1`、`?auto=1`、`?seed=42`、`?outline=0`、`?backdrop=0`、`?touch=1`、`?model=1`、`?wings=1`、`?overview=1`。`auto` 会先找最近光点,凑够 3 个再去最近未完成亭台,用于回归验证主循环。`?debug=1` 时 `window.__qianli = { bike, world, scoring, motes, input }` 供 CDP 脚本做传送/飞行/碰撞/触屏测试(`temp/cdp-flight.mjs`、`temp/cdp-mobile.mjs`、`temp/cdp-model.mjs`)。
 
 ## 决策记录
 
-- **平面长卷而非弯曲世界**:弯曲拖累物理/相机,纵深交给雾与分层剪影。
+- **开阔山丘而非 U 形峡谷**:参考站用街道房屋铺满地图,本项目用高低错落、可骑到顶的山丘替代;地图扩到约 1120×1120 m,河流/石桥/卷轴端头移除,五座亭台移到山顶。
+- **近身草毯而非全图铺草**:全图铺满高密度草会拖垮性能,改为全场稀疏草 + 跟随玩家的 10 m 网格草毯,保证近景密度。
 - **程序化山水而非原画贴图**:本机取不到扫描件,且更原创;保留 `public/scroll.webp` 槽位。
 - **uniform 上色而非遮罩贴图**:零额外 draw call,所有材质共用同一逻辑。
 - **竹骨自行车**:保留 riding game 身份符号,与宋画形成刻意的时代错位。
 - **每区 3 次交付**:4 次在 8 分钟内难以完成全部 5 区,3 次更可玩。
 - **CSS 绢纹替代 bloom 合成**:先保证稳定与性能;合成 pass 留作后续升级。
 - **转向方向**:相机在车后看 +Z 时屏幕右是世界 -x,物理转向符号已按此校正。
-- **河流保留但改浅滩**:水是《千里江山图》的核心意象,直接删掉损失太大;改为浅滩涉水 + 可靠石桥,消除落水重置的卡顿。
 - **飞行采用三连跳**:沿用参考站的心智模型;Space 上升、S 下降、三连 Space 收翼,避免“飞上去下不来”。
-- **树木不碰撞**:600+ 棵树逐个做碰撞不划算,且会打断骑行节奏;用走廊软墙和亭台/桥栏提供“实体感”。
+- **树木不碰撞**:900+ 棵树逐个做碰撞不划算,且会打断骑行节奏;用陡坡与边界提供“实体感”。
 - **颜料用 InstancedMesh + 贴图光晕**:避开 `gl_PointSize` 在 ANGLE 下被限制为 1 px 的坑;宝石核心给实体感,光晕给远距离可读性。

@@ -403,8 +403,8 @@ body.touch .for-touch {
   position: absolute;
   right: 22px;
   bottom: 24px;
-  width: 150px;
-  height: 260px;
+  width: 170px;
+  height: 170px;
   border: 1px solid rgba(35, 48, 47, 0.28);
   background: rgba(240, 233, 216, 0.72);
   border-radius: 2px;

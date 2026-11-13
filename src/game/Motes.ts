@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, range } from '../core/PRNG';
-import { centerX } from '../world/Path';
-import { WATER_LEVEL, World, type PigmentIndex } from '../world/World';
+import { WORLD_HALF, World, type PigmentIndex } from '../world/World';
 import { PIGMENTS } from './Pigments';
 
 interface MoteData {
@@ -63,10 +62,8 @@ export class Motes {
     const rng = mulberry32(seed ^ 0x51a7c3);
 
     const push = (x: number, z: number, type: PigmentIndex): void => {
-      if (Math.abs(world.lateralAt(x, z)) > 52) return;
-      if (world.isWater(x, z)) return;
+      if (Math.abs(x) > WORLD_HALF - 40 || Math.abs(z) > WORLD_HALF - 40) return;
       const ground = world.heightAt(x, z);
-      if (ground < WATER_LEVEL + 0.3) return;
       this.data.push({
         type,
         x,
@@ -93,10 +90,10 @@ export class Motes {
       }
     }
 
-    for (let i = 0; i < 26; i++) {
-      const z = 24 + i * 30 + range(rng, -8, 8);
-      const x = centerX(z) + range(rng, -7, 7);
-      push(x, z, (i % 3) as PigmentIndex);
+    for (let i = 0; i < 40; i++) {
+      const angle = rng() * Math.PI * 2;
+      const radius = range(rng, 30, 440);
+      push(Math.cos(angle) * radius, Math.sin(angle) * radius, (i % 3) as PigmentIndex);
     }
 
     const count = this.data.length;

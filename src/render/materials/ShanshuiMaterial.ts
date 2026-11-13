@@ -97,26 +97,57 @@ const fragmentShader = /* glsl */ `
     pigment *= 0.94 + 0.12 * speck;
     pigment = mix(pigment, uInk, smoothstep(0.55, 0.95, slope) * 0.22);
 
+    float flatMask = 1.0 - smoothstep(0.16, 0.4, slope);
+    float meadow = fbm(wp * 0.035 + 19.0);
+    float patches = fbm(wp * 0.011 + 4.0);
+    pigment = mix(pigment, uOchre, smoothstep(0.6, 0.92, patches) * flatMask * 0.32);
+    pigment = mix(pigment, uMalachite * 0.9, smoothstep(0.3, 0.8, meadow) * flatMask * 0.2);
+
+    float blades = fbm(vec2(wp.x * 0.5, wp.y * 1.4) + 7.0);
+    float bladeLine = smoothstep(0.6, 0.9, blades) * flatMask;
+    pigment = mix(pigment, pigment * 1.3 + 0.015, bladeLine * 0.3);
+
+    float grassFine = fbm(vec2(wp.x * 1.1, wp.y * 2.0) + 13.0);
+    float blades2 = smoothstep(0.5, 0.82, grassFine) * flatMask;
+    pigment = mix(pigment, mix(uMalachite * 1.05, uOchre * 0.8, 0.18), blades2 * 0.35);
+
+    float pebble = smoothstep(0.985, 1.0, hash21(floor(wp * 5.0)));
+    float pebbleMask = pebble * flatMask;
+
+    float fleck = hash21(floor(wp * 2.4));
+    float flowers = smoothstep(0.991, 1.0, fleck) * flatMask;
+    vec3 bloom = mix(uGold, vec3(0.94, 0.92, 0.84), step(0.55, hash21(floor(wp * 3.3))));
+    pigment = mix(pigment, bloom, flowers * 0.8);
+
+    float rock = smoothstep(0.42, 0.8, slope);
+    pigment = mix(pigment, mix(uAzurite, uInk, 0.35) * 0.9, rock * 0.35);
+
     float stroke = sin(wp.x * 0.55 + fbm(wp * 0.15 + 4.0) * 5.0);
     float strokeMask = 1.0 - smoothstep(0.2, 0.55, slope);
-    pigment *= 1.0 + stroke * 0.035 * strokeMask;
+    pigment *= 1.0 + stroke * 0.045 * strokeMask;
 
     vec3 inkBase = mix(uSilk, uInk, clamp(0.26 + slope * 0.55 + alt * 0.22, 0.0, 0.88));
     inkBase = mix(inkBase, uInk, smoothstep(0.58, 0.92, veins) * 0.5);
 
     float wash = fbm(wp * 0.011 + 11.0);
     inkBase *= 0.8 + 0.34 * wash;
+    inkBase *= 1.0 - bladeLine * 0.1;
+    inkBase = mix(inkBase, uMalachite * 0.85, flatMask * 0.2 + smoothstep(0.4, 0.8, meadow) * 0.08);
+    inkBase = mix(inkBase, uInk, blades2 * 0.14);
+    inkBase = mix(inkBase, uInk * 0.6, pebbleMask * 0.28);
+    inkBase = mix(inkBase, uInk, rock * 0.22);
     inkBase *= 0.94 + 0.1 * stroke * strokeMask;
 
     float streak = fbm(vec2(wp.x * 0.05, vWorld.y * 0.14));
     inkBase = mix(inkBase, uInk, smoothstep(0.58, 0.9, streak) * slope * 0.6);
 
     float contourA = abs(fract(vWorld.y * 0.16 + fbm(wp * 0.03) * 1.4) - 0.5);
-    float line = smoothstep(0.05, 0.0, contourA) * 0.62;
+    float line = smoothstep(0.05, 0.0, contourA) * 0.55;
     #ifndef LOW_QUALITY
     float contourB = abs(fract(vWorld.y * 0.55 + fbm(wp * 0.09) * 2.2) - 0.5);
-    line += smoothstep(0.03, 0.0, contourB) * 0.22;
+    line += smoothstep(0.03, 0.0, contourB) * 0.18;
     #endif
+    line *= mix(0.2, 1.0, smoothstep(0.04, 0.28, slope));
     line *= 1.0 - smoothstep(120.0, 320.0, vDist);
     inkBase = mix(inkBase, uInk, line * 0.8);
     pigment = mix(pigment, uInk, line * 0.45);

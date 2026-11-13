@@ -1,14 +1,12 @@
 import * as THREE from 'three';
 import type { InputState } from '../core/Input';
 import { clamp, damp, wrapAngle } from '../core/MathUtils';
-import { centerX } from '../world/Path';
-import { WATER_LEVEL, World } from '../world/World';
+import { WORLD_HALF, World } from '../world/World';
 
 export interface BikeEvent {
   jumped: boolean;
   landed: boolean;
   hardLanding: boolean;
-  water: boolean;
 }
 
 const GRAVITY = 22;
@@ -63,7 +61,7 @@ export class BikePhysics {
   }
 
   update(dt: number, input: InputState): BikeEvent {
-    const ev: BikeEvent = { jumped: false, landed: false, hardLanding: false, water: false };
+    const ev: BikeEvent = { jumped: false, landed: false, hardLanding: false };
     const forward = this.forward();
 
     this.steer = damp(this.steer, input.steer, 9, dt);
@@ -106,16 +104,11 @@ export class BikePhysics {
     this.pos.x += forward.x * this.speed * dt;
     this.pos.z += forward.z * this.speed * dt;
 
-    const maxLat = this.flying ? 112 : 60;
-    const lat = this.world.lateralAt(this.pos.x, this.pos.z);
-    if (Math.abs(lat) > maxLat) {
-      const cx = centerX(this.pos.z);
-      this.pos.x = cx + Math.sign(lat) * maxLat;
+    const limit = WORLD_HALF - 18;
+    if (Math.abs(this.pos.x) > limit || Math.abs(this.pos.z) > limit) {
+      this.pos.x = clamp(this.pos.x, -limit, limit);
+      this.pos.z = clamp(this.pos.z, -limit, limit);
       this.speed *= 0.78;
-    }
-    if (this.pos.z < 9 || this.pos.z > 791) {
-      this.world.clampToWorld(this.pos);
-      this.speed *= 0.6;
     }
 
     this.world.resolveCollisions(this.pos, 0.45);
@@ -159,11 +152,6 @@ export class BikePhysics {
         this.grounded = true;
         this.airTime = 0;
       }
-    }
-
-    if (this.grounded && this.world.heightAt(this.pos.x, this.pos.z) < WATER_LEVEL - 0.06) {
-      ev.water = true;
-      this.speed *= Math.max(0, 1 - 3.4 * dt);
     }
 
     const speedNorm = clamp(Math.abs(this.speed) / 10, 0, 1);

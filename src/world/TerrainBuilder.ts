@@ -1,29 +1,20 @@
 import * as THREE from 'three';
-import { centerX, WORLD_LENGTH } from './Path';
-import { PLAYABLE_LATERAL, World, WORLD_HALF_WIDTH } from './World';
-import { smoothstep } from '../core/MathUtils';
+import { WORLD_HALF, World } from './World';
 
-const Z_STEP = 4;
-const X_STEP = 4;
-
-export function buildTerrain(world: World): THREE.Mesh {
-  const halfWidth = WORLD_HALF_WIDTH;
-  const rows = Math.floor(WORLD_LENGTH / Z_STEP) + 1;
-  const cols = Math.floor((halfWidth * 2) / X_STEP) + 1;
-  const count = rows * cols;
+export function buildTerrain(world: World, step = 6): THREE.Mesh {
+  const perAxis = Math.floor((WORLD_HALF * 2) / step) + 1;
+  const count = perAxis * perAxis;
 
   const positions = new Float32Array(count * 3);
   const regions = new Float32Array(count);
   const valleys = new Float32Array(count);
   const indices: number[] = [];
 
-  for (let r = 0; r < rows; r++) {
-    const z = r * Z_STEP;
-    const cx = centerX(z);
-    for (let c = 0; c < cols; c++) {
-      const lat = -halfWidth + c * X_STEP;
-      const x = cx + lat;
-      const i = r * cols + c;
+  for (let iz = 0; iz < perAxis; iz++) {
+    const z = -WORLD_HALF + iz * step;
+    for (let ix = 0; ix < perAxis; ix++) {
+      const x = -WORLD_HALF + ix * step;
+      const i = iz * perAxis + ix;
       positions[i * 3] = x;
       positions[i * 3 + 1] = world.heightAt(x, z);
       positions[i * 3 + 2] = z;
@@ -38,17 +29,17 @@ export function buildTerrain(world: World): THREE.Mesh {
         }
       }
       regions[i] = best;
-      valleys[i] = 1 - smoothstep(20, PLAYABLE_LATERAL, Math.abs(lat));
+      valleys[i] = 1;
     }
   }
 
-  for (let r = 0; r < rows - 1; r++) {
-    for (let c = 0; c < cols - 1; c++) {
-      const a = r * cols + c;
-      const b = a + cols;
-      const cc = a + 1;
+  for (let iz = 0; iz < perAxis - 1; iz++) {
+    for (let ix = 0; ix < perAxis - 1; ix++) {
+      const a = iz * perAxis + ix;
+      const b = a + perAxis;
+      const c = a + 1;
       const d = b + 1;
-      indices.push(a, b, cc, cc, b, d);
+      indices.push(a, b, c, c, b, d);
     }
   }
 
