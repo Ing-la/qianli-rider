@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BikeModel } from './bike/BikeModel';
 import { BikePhysics } from './bike/BikePhysics';
 import { CameraRig } from './bike/CameraRig';
+import { ViewController } from './bike/ViewController';
 import { DebugPanel } from './core/Debug';
 import { Input } from './core/Input';
 import { wrapAngle } from './core/MathUtils';
@@ -46,6 +47,7 @@ export class App {
   private readonly props: PropsResult;
   private readonly bike: BikePhysics;
   private readonly bikeModel: BikeModel;
+  private readonly view: ViewController;
   private readonly rig: CameraRig;
   private readonly input = new Input();
   private readonly debug: DebugPanel;
@@ -71,11 +73,15 @@ export class App {
   private jumpTimes: number[] = [];
   private readonly forceReveal: boolean;
   private readonly autoPilot: boolean;
+  private readonly modelMode: boolean;
+  private readonly modelWings: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
     const params = new URLSearchParams(location.search);
     this.forceReveal = params.has('reveal') || params.has('colored');
     this.autoPilot = params.has('auto');
+    this.modelMode = params.has('model');
+    this.modelWings = params.has('wings');
     this.touch = TouchControls.isTouchCapable() || params.has('touch');
     document.body.classList.toggle('touch', this.touch);
 
@@ -130,7 +136,8 @@ export class App {
     this.targetBeam.visible = false;
     this.render.scene.add(this.targetBeam);
 
-    this.rig = new CameraRig(this.render.camera);
+    this.view = new ViewController(canvas);
+    this.rig = new CameraRig(this.render.camera, this.view);
     this.rig.snap(this.bike);
 
     this.minimap = new Minimap(el<HTMLCanvasElement>('minimap'));
@@ -144,7 +151,7 @@ export class App {
     );
 
     this.bindUi();
-    this.touchControls = this.touch ? new TouchControls(this.input) : null;
+    this.touchControls = this.touch ? new TouchControls(this.input, this.view) : null;
     this.applyBikeTransform(0);
     this.updateTitleBest();
 
@@ -162,10 +169,16 @@ export class App {
         scoring: this.scoring,
         motes: this.motes,
         input: this.input,
+        view: this.view,
       };
     }
 
-    if (params.has('autostart')) {
+    if (this.modelMode) {
+      this.startRun();
+      this.hud.hide();
+      el('title').classList.add('hidden');
+      el('finish').classList.add('hidden');
+    } else if (params.has('autostart')) {
       this.startRun();
     }
 
@@ -202,6 +215,7 @@ export class App {
     }
     this.scoring.reset();
     this.motes.reset();
+    this.view.reset();
     this.bike.reset(this.world.spawnX, this.world.spawnZ, 0);
     this.rig.snap(this.bike);
     this.rideTime = 0;
@@ -237,6 +251,7 @@ export class App {
     this.jumpTimes = [];
     this.waterCooldown = 0;
     this.targetBeam.visible = false;
+    this.view.reset();
     this.touchControls?.releaseAll();
     this.input.resetTouch();
     this.hud.hide();
@@ -350,6 +365,11 @@ export class App {
   }
 
   private update(dt: number): void {
+    if (this.modelMode) {
+      this.updateModelMode(dt);
+      return;
+    }
+
     const input = this.input.sample();
 
     if (this.autoPilot && this.state === 'playing' && !this.input.anyPressed()) {
@@ -481,6 +501,34 @@ export class App {
     this.sky.update(this.render.camera, this.rideTime);
     this.animateBeacons(this.rideTime);
     this.updateTargetBeam();
+  }
+
+  private updateModelMode(dt: number): void {
+    this.rideTime += dt;
+    this.bike.speed = 5.5;
+    this.bike.steer = Math.sin(this.rideTime * 0.5) * 0.55;
+    this.bike.lean = this.bike.steer * 0.1;
+    this.bike.pitch = 0;
+    this.applyBikeTransform(dt);
+    this.bikeModel.setWings(this.modelWings, this.rideTime * 9);
+
+    const angle = this.rideTime * 0.4 + 0.9;
+    const radius = 3.15;
+    const camera = this.render.camera;
+    camera.position.set(
+      this.bike.pos.x + Math.sin(angle) * radius,
+      this.bike.pos.y + 1.5,
+      this.bike.pos.z + Math.cos(angle) * radius,
+    );
+    camera.lookAt(this.bike.pos.x, this.bike.pos.y + 1.0, this.bike.pos.z);
+    camera.fov = 40;
+    camera.updateProjectionMatrix();
+
+    this.shanshui.sync(this.world, this.rideTime);
+    this.backdrop.update(camera);
+    this.sky.update(camera, this.rideTime);
+    this.targetBeam.visible = false;
+    this.animateBeacons(this.rideTime);
   }
 
   private nearestInfo(): {

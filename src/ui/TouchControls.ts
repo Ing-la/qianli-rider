@@ -1,24 +1,36 @@
 import type { Input } from '../core/Input';
+import type { ViewController } from '../bike/ViewController';
 
 export class TouchControls {
   static isTouchCapable(): boolean {
-    return (
-      (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ||
-      navigator.maxTouchPoints > 0
-    );
+    if (typeof matchMedia !== 'function') return navigator.maxTouchPoints > 0;
+    if (matchMedia('(pointer: coarse)').matches) return true;
+    // touch laptops usually also have a hover-capable pointer; phones do not
+    return navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches;
   }
 
   private readonly stick: HTMLElement;
   private readonly knob: HTMLElement;
+  private readonly lookPad: HTMLElement;
+  private readonly lookKnob: HTMLElement;
   private readonly releases: Array<() => void> = [];
   private activeId: number | null = null;
+  private lookId: number | null = null;
   private centerX = 0;
   private centerY = 0;
   private radius = 52;
+  private lookCenterX = 0;
+  private lookCenterY = 0;
+  private lookRadius = 42;
 
-  constructor(private readonly input: Input) {
+  constructor(
+    private readonly input: Input,
+    private readonly view: ViewController,
+  ) {
     this.stick = document.getElementById('stick') as HTMLElement;
     this.knob = document.getElementById('stick-knob') as HTMLElement;
+    this.lookPad = document.getElementById('look-pad') as HTMLElement;
+    this.lookKnob = document.getElementById('look-knob') as HTMLElement;
 
     this.stick.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -46,6 +58,34 @@ export class TouchControls {
     };
     window.addEventListener('pointerup', endStick);
     window.addEventListener('pointercancel', endStick);
+
+    this.lookPad.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.lookId = e.pointerId;
+      try {
+        this.lookPad.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      const rect = this.lookPad.getBoundingClientRect();
+      this.lookCenterX = rect.left + rect.width / 2;
+      this.lookCenterY = rect.top + rect.height / 2;
+      this.lookRadius = rect.width * 0.34;
+      this.moveLook(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (e.pointerId === this.lookId) this.moveLook(e.clientX, e.clientY);
+    });
+
+    const endLook = (e: PointerEvent): void => {
+      if (e.pointerId !== this.lookId) return;
+      this.lookId = null;
+      this.lookKnob.style.transform = 'translate(0, 0)';
+      this.view.setTouchLook(0, 0);
+    };
+    window.addEventListener('pointerup', endLook);
+    window.addEventListener('pointercancel', endLook);
 
     const jump = document.getElementById('btn-jump') as HTMLElement;
     const boost = document.getElementById('btn-boost') as HTMLElement;
@@ -114,6 +154,18 @@ export class TouchControls {
     this.input.setTouchAxis(shaped(dx / this.radius), shaped(-dy / this.radius));
   }
 
+  private moveLook(x: number, y: number): void {
+    let dx = x - this.lookCenterX;
+    let dy = y - this.lookCenterY;
+    const len = Math.hypot(dx, dy);
+    if (len > this.lookRadius) {
+      dx = (dx / len) * this.lookRadius;
+      dy = (dy / len) * this.lookRadius;
+    }
+    this.lookKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    this.view.setTouchLook(dx / this.lookRadius, dy / this.lookRadius);
+  }
+
   private resetStick(): void {
     this.knob.style.transform = 'translate(0, 0)';
     this.input.setTouchAxis(0, 0);
@@ -121,7 +173,10 @@ export class TouchControls {
 
   releaseAll(): void {
     this.activeId = null;
+    this.lookId = null;
     this.resetStick();
+    this.lookKnob.style.transform = 'translate(0, 0)';
+    this.view.setTouchLook(0, 0);
     for (const release of this.releases) release();
   }
 }

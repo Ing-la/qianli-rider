@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export class RenderSystem {
   readonly renderer: THREE.WebGLRenderer;
@@ -21,6 +22,11 @@ export class RenderSystem {
 
     this.scene.background = new THREE.Color(0xe9e5d6);
     this.scene.fog = new THREE.Fog(0xe3e4d5, 170, 620);
+
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.32;
+    pmrem.dispose();
 
     this.camera = new THREE.PerspectiveCamera(
       62,

@@ -41,8 +41,10 @@ src/
     materials/ShanshuiMaterial.ts  地形/中景共用的青绿山水材质
   bike/
     BikePhysics.ts        120Hz 街机物理(加速/阻力/坡度/转向/跳跃/落水)
-    BikeModel.ts          竹骨自行车 + 骑手 + 车筐颜料光
-    CameraRig.ts          弹簧跟随、速度 FOV、防穿地
+    BikeModel.ts          高细节竹骨车 + 分层骑手 + 骨骼 IK + 布料模拟 + 翅膀
+    ProceduralTextures.ts 竹/草编/织物/皮革/黄铜/藤编/纸张/光晕 CanvasTexture
+    ViewController.ts     鼠标拖拽 / 触屏视角盘 → 相机偏航/俯仰偏移
+    CameraRig.ts          球形跟随、速度 FOV、防穿地(距离 5.4 m)
   game/
     Pigments.ts           三色定义/容量/每区交付数
     Motes.ts              GPU Points 光点(1 draw call)+ 拾取/重生
@@ -85,12 +87,29 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 - **碰撞**:`World.resolveCollisions(pos, radius)` 把车推出亭台基座,并在桥面平台内限制横向;非飞行时走廊横向钳制 ±60,坡度 >0.5 开始强力减速、>1.1 基本挡停。
 - **河流**:`heightAt` 河床 -0.9;`BikePhysics` 检测到浅水时持续减速并每 5 s 最多触发一次水声,不再重置位置。
 
+## 模型细节
+
+- **自行车**:Catmull-Rom + TubeGeometry 竹管带微弯;竹节环、铜箍/铜球接头、关节缠绳;挡泥板与撑杆;后货架;皮革鞍座 + 螺旋弹簧 + 铜铆钉;卷轴筒;藤筐(贴图 + 竹条格栅 + 皮绑带);打气筒;鞍袋;车铃;刹车线与护套;链条;挂在前把的纸灯笼(Sprite 光晕 + 自发光);24 根辐条、轮毂/法兰、轮圈/轮胎。
+- **骑手**:LatheGeometry 躯干/裙摆带径向褶皱;交领、束腰、玉佩;白发髻/发簪/面部小部件;草帽带竹筋与帽箍、下颌绳;肩披 + 披风 + 围巾 + 腰带四层布料,每帧做 CPU 顶点波动并重算法线;深色护腿与布靴。
+- **动画**:踩踏用两段骨骼 IK(髋→脚蹬目标,膝盖朝前);手臂同样用 IK 追把手(随转向组旋转);关节/手/靴用 InstancedMesh 更新矩阵;车轮、曲柄、踏板、灯笼、身体前倾/转头都有动态。
+- **材质**:CanvasTexture 颜色 + 同图 bumpMap;织物/木/藤/纸双面;黄铜使用 metalness,并在 Renderer 用 RoomEnvironment + PMREM 提供环境反射(`environmentIntensity 0.32`)。
+- **检视模式**:`?model=1` 隐藏 HUD,模型原地以 5.5 m/s 踩踏,相机环绕 3.15 m;`?wings=1` 展开翅膀。正常游戏相机距离 5.4 m。
+
 ## 角色与颜料
 
 - **骑手**(`BikeModel.buildRider`):按材质合并的分层程序化模型——斗笠(帽檐/帽顶/帽箍)、交领、宽袖、束腰、裙摆、披风、两条围巾与腰带飘带、护腿、布鞋、发髻与发簪。披风/围巾/腰带的摆动在 `update()` 里按速度做 flutter。
 - **翅膀**(`buildWings`):每侧 5 片渐变色羽片合并成一个几何;`vertexColors` 从羽根米白过渡到羽尖墨青;`setWings(active, phase)` 做拍翅。
 - **颜料**(`Motes`):每颗由两个 InstancedMesh 组成——八面体宝石(MeshStandardMaterial + 每实例颜色)和实例化 billboard 光晕(手绘 CanvasTexture 径向光斑 + 十字星芒,每帧用相机四元数朝向)。总计 2 draw call。11 m 内磁吸(仅筐有空位时)、4.5 m 拾取、8 s 重生。
 - **为什么不用 Points/自定义实例 shader**:Windows ANGLE 会把 `gl_PointSize` 限制到 1 px;自定义 InstancedBufferGeometry + ShaderMaterial 在当前环境也出现空绘制。Texture + InstancedMesh 是最稳的跨平台方案。
+
+## 自由视角
+
+- `ViewController` 维护 `yaw/pitch` 当前值与目标值:
+  - 鼠标/触屏在 canvas 上按住拖拽 → 直接累加目标偏航/俯仰(灵敏度 0.0038/0.0052)。
+  - 触屏右下「视角」盘 → 摇杆偏移量驱动角速度(偏航 1.8 rad/s、俯仰 1.15 rad/s)。
+- 限制:偏航 ±2.5 rad,俯仰 -0.38…0.70 rad。
+- 回正:松手 1.2 s 后且车速 >2 m/s 时,目标值按指数缓慢回零;停车时保持视角便于环顾。
+- `CameraRig` 用 `phi = 0.18 + pitch` 的球坐标绕自行车(半径 5.4 m)布置相机,朝向 `pivot + forward(yaw)*3.2`;相机高度仍做地形防穿。`ViewController` 已在 `__qianli` 调试对象里暴露。
 
 ## 移动端
 
@@ -109,7 +128,7 @@ input → (可选 autopilot) → 物理固定 120Hz → 拾取 → 交付 → �
 
 ## 调试参数
 
-`?debug=1`、`?autostart=1`、`?reveal=1`、`?auto=1`、`?seed=42`、`?outline=0`、`?backdrop=0`、`?touch=1`。`auto` 会先找最近光点,凑够 3 个再去最近未完成亭台,用于回归验证主循环。`?debug=1` 时 `window.__qianli = { bike, world, scoring, motes, input }` 供 CDP 脚本做传送/飞行/碰撞/触屏测试(`temp/cdp-flight.mjs`、`temp/cdp-mobile.mjs`)。
+`?debug=1`、`?autostart=1`、`?reveal=1`、`?auto=1`、`?seed=42`、`?outline=0`、`?backdrop=0`、`?touch=1`、`?model=1`、`?wings=1`。`auto` 会先找最近光点,凑够 3 个再去最近未完成亭台,用于回归验证主循环。`?debug=1` 时 `window.__qianli = { bike, world, scoring, motes, input }` 供 CDP 脚本做传送/飞行/碰撞/触屏测试(`temp/cdp-flight.mjs`、`temp/cdp-mobile.mjs`、`temp/cdp-model.mjs`)。
 
 ## 决策记录
 
