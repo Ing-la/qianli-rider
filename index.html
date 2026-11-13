@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#1f2a2e" />
+    <title>设色千里 · Qianli Rider</title>
+    <meta
+      name="description"
+      content="骑竹骨单车穿入王希孟《千里江山图》,收集石青、石绿与赭石,把长卷一寸寸画回来。"
+    />
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div id="ui">
+      <div id="paper" aria-hidden="true"></div>
+      <section id="title" class="screen">
+        <div class="frame" aria-hidden="true"></div>
+        <p class="eyebrow">王希孟《千里江山图》· 政和三年 · 公版</p>
+        <h1>设色千里</h1>
+        <p class="sub">山河尚是白描。骑车去拾颜料,把这一卷重新画上颜色。</p>
+        <button id="enter-btn" type="button">入画</button>
+        <p class="keys for-keyboard">W / S 蹬车 · A / D 转向 · Shift 疾驰 · Space 跃起(连按三次起飞,飞时按 S 下降)· M 静音</p>
+        <p class="keys for-touch">左摇杆骑行 · 「跃」连点三次起飞 · 飞时按「降」下降</p>
+        <p class="best" id="title-best"></p>
+      </section>
+
+      <div id="hud" class="hidden">
+        <div id="pigments">
+          <div class="pig" data-pig="0"><span class="dot"></span><span class="name">石青</span><span class="count">0</span></div>
+          <div class="pig" data-pig="1"><span class="dot"></span><span class="name">石绿</span><span class="count">0</span></div>
+          <div class="pig" data-pig="2"><span class="dot"></span><span class="name">赭石</span><span class="count">0</span></div>
+          <div id="carry">0 / 6</div>
+        </div>
+        <div id="objective">
+          <span id="objective-dot"></span>
+          <span id="objective-text">寻找亭台</span>
+        </div>
+        <div id="combo" class="hidden">×1</div>
+        <div id="wings" class="hidden">风中</div>
+        <div id="timer">0:00</div>
+        <div id="score">0 分</div>
+        <div id="guide">
+          <span id="guide-arrow">▲</span>
+          <span id="guide-label">青峦台</span>
+          <span id="guide-dist">— m</span>
+        </div>
+        <canvas id="minimap" width="150" height="260"></canvas>
+        <div id="toast" class="hidden"></div>
+        <div id="touch-controls">
+          <div id="stick"><div id="stick-knob"></div></div>
+          <div id="touch-buttons">
+            <button id="btn-boost" type="button">疾</button>
+            <button id="btn-dive" type="button">降</button>
+            <button id="btn-jump" type="button">跃</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="finish" class="screen hidden">
+        <p class="eyebrow">一局终了</p>
+        <h1 id="finish-title">山河已设色</h1>
+        <p class="score"><strong id="finish-score">0</strong> 分</p>
+        <p class="meta"><span id="finish-regions">0 / 5</span> 处山河上色 · 用时 <span id="finish-time">0:00</span></p>
+        <p class="best" id="finish-best"></p>
+        <ol id="best-list"></ol>
+        <div class="row">
+          <button id="again-btn" type="button">再入画</button>
+          <button id="title-btn" type="button" class="ghost">回到画外</button>
+        </div>
+      </section>
+
+      <div id="loading">研墨铺绢…</div>
+      <div id="debug" class="hidden"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
